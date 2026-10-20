@@ -582,15 +582,71 @@ struct PathRow: View {
     }
 }
 
+/// Cheats that write the same values or code slots. Enabling one asks first and turns its counterparts off.
+enum CheatConflicts {
+    static let groups: [[String]] = [
+        ["cheat_health", "cheat_maxstamina"],
+        ["cheat_stamina", "cheat_staminafill", "cheat_maxstamina"],
+        ["cheat_eat", "cheat_item10"],
+        ["cheat_maxheart", "cheat_heartfill"],
+        ["cheat_weapon", "cheat_durability"],
+        ["cheat_materials", "cheat_materials_all"],
+        ["cheat_food", "cheat_food_all"],
+        ["cheat_jump", "cheat_moonjump"],
+    ]
+
+    static func counterparts(of name: String) -> [String] {
+        var out = Set<String>()
+        for group in groups where group.contains(name) {
+            for member in group where member != name { out.insert(member) }
+        }
+        return out.sorted()
+    }
+}
+
 struct CheatRow: View {
     var name: String
     @EnvironmentObject var model: AppModel
+    @State private var counterparts: [String] = []
+    @State private var asking = false
+
+    private var label: String {
+        model.settings?.game[name]?.description.replacingOccurrences(of: "Cheat: ", with: "") ?? name
+    }
+
+    private func isOn(_ key: String) -> Bool {
+        model.settings?.settings["game"]?[key]?.string == "1"
+    }
+
+    private func counterLabel(_ key: String) -> String {
+        model.settings?.game[key]?.description.replacingOccurrences(of: "Cheat: ", with: "") ?? key
+    }
+
+    private func set(_ values: [String: JSONValue]) {
+        model.setSettings(["game": .object(values)])
+    }
+
     var body: some View {
-        let description = model.settings?.game[name]?.description.replacingOccurrences(of: "Cheat: ", with: "") ?? name
-        let on = model.settings?.settings["game"]?[name]?.string == "1"
-        Toggle(description, isOn: Binding(get: { on },
-                                          set: { model.setSettings(["game": [name: $0 ? "1" : .null]]) }))
-            .tint(Theme.red)
+        let on = isOn(name)
+        Toggle(label, isOn: Binding(get: { on }, set: { want in
+            if !want { set([name: .null]); return }
+            let clashes = CheatConflicts.counterparts(of: name).filter(isOn)
+            if clashes.isEmpty { set([name: "1"]) }
+            else { counterparts = clashes; asking = true }
+        }))
+        .tint(Theme.red)
+        .alert("Cheats overlap", isPresented: $asking) {
+            Button("Turn on \(label)") {
+                var values: [String: JSONValue] = [name: "1"]
+                for other in counterparts { values[other] = .null }
+                set(values)
+                counterparts = []
+            }
+            Button("Cancel", role: .cancel) { counterparts = [] }
+        } message: {
+            Text("\(label) and \(counterparts.map(counterLabel).joined(separator: ", ")) write the same values or code "
+                 + "slots. One has to be off while the other is on: turning on \(label) turns the other off.")
+        }
     }
 }
 

@@ -55,7 +55,7 @@ struct AmiiboSection: View {
                     .textFieldStyle(.roundedBorder).frame(width: 200)
             }
             Text("Switchy does not include amiibo data. Point this at your own dump folder (any layout; Flipper text "
-                 + "or binary NTAG215 files) and pick a tag; the runtime presents it as a virtual NFC tag. Amiibo IDs "
+                 + "or binary NTAG215 .bin files) and pick a tag; the runtime presents it as a virtual NFC tag. Amiibo IDs "
                  + "(character, series, model) are known for the Zelda entries here; other entries present their tag "
                  + "without character data. “Choose .nfc for selected…” assigns one file to the highlighted entry.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -143,7 +143,7 @@ struct AmiiboSection: View {
         let base = URL(fileURLWithPath: root).resolvingSymlinksInPath()
         guard let walk = FileManager.default.enumerator(at: base, includingPropertiesForKeys: nil) else { return [] }
         var out: [AmiiboFile] = []
-        for case let found as URL in walk where found.pathExtension.lowercased() == "nfc" {
+        for case let found as URL in walk where ["nfc", "bin"].contains(found.pathExtension.lowercased()) {
             out.append(AmiiboFile(path: found.resolvingSymlinksInPath().path,
                                   tokens: tokens(found.deletingPathExtension().lastPathComponent)))
         }
@@ -252,7 +252,7 @@ struct AmiiboSection: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Use dump"
         panel.message = "Choose the .nfc dump for \(entry.name)"
-        if let type = UTType(filenameExtension: "nfc") { panel.allowedContentTypes = [type] }
+        panel.allowedFileTypes = ["nfc", "NFC", "bin", "BIN"]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         assign(entry, path: url.path)
     }

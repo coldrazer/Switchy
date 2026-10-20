@@ -34,7 +34,6 @@ struct HomeView: View {
     @State private var selection = 0
     @State private var detailsFor: LibraryApp?
     @State private var dropTargeted = false
-    @State private var forward = true
     @FocusState private var focused: Bool
 
     var items: [HomeItem] {
@@ -58,7 +57,7 @@ struct HomeView: View {
                     shelf
                     Spacer(minLength: 24)
                 }
-                BottomBar(controllers: controllers, page: selection, pages: items.count)
+                BottomBar(controllers: controllers, page: selection, pages: items.count) { move($0) }
                     .padding(.horizontal, 56).padding(.bottom, 30)
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
@@ -99,14 +98,14 @@ struct HomeView: View {
             ZStack(alignment: .bottomLeading) {
                 TileView(item: all[start], art: art(all[start]), large: true)   // items always holds the Add tile
                     .id(all[start].id)
-                    .transition(.asymmetric(insertion: .move(edge: forward ? .trailing : .leading)
-                                                .combined(with: .opacity),
-                                            removal: .opacity.animation(.easeIn(duration: 0.12))))
+                    .transition(.asymmetric(insertion: .scale(scale: 0.94).combined(with: .opacity),
+                                            removal: .opacity.animation(.easeIn(duration: 0.1))))
                     .onTapGesture(count: 2) { activate() }
                     .onTapGesture { options() }
             }
             VStack(alignment: .leading, spacing: 18) {
                 TitleBlock(item: selected, details: details(selected), onPlay: activate, onOptions: options)
+                    .animation(nil, value: selection)   // swap the title; the strip carries the motion
                 GeometryReader { geo in
                     // One strip of every tile, shifted by one step per selection: the row glides instead of
                     // inserting and removing views. Tiles outside the visible slots are faded out, not removed.
@@ -118,7 +117,7 @@ struct HomeView: View {
                             TileView(item: item, art: art(item), large: false)
                                 .offset(x: CGFloat(slot) * step)
                                 .opacity(slot >= 0 && slot < slots ? 1 : 0)
-                                .onTapGesture { forward = index > selection; selection = index }
+                                .onTapGesture { selection = index }
                         }
                     }
                     .frame(width: geo.size.width, height: Theme.tile, alignment: .bottomLeading)
@@ -147,7 +146,6 @@ struct HomeView: View {
     }
 
     private func move(_ delta: Int) {
-        forward = delta >= 0
         selection = max(0, min(items.count - 1, selection + delta))
     }
 
@@ -565,19 +563,46 @@ struct KeyHint: View {
     }
 }
 
+/// A clickable step arrow for the library strip; it calls the same move() the keyboard and controller use.
+struct StepButton: View {
+    var symbol: String
+    var enabled: Bool
+    var action: () -> Void
+    @State private var hover = false
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(enabled ? .white : .white.opacity(0.35))
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(.white.opacity(enabled && hover ? 0.28 : 0.14)))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .onHover { hover = $0 }
+        .help(symbol == "chevron.left" ? "Previous game" : "Next game")
+        .accessibilityLabel(symbol == "chevron.left" ? "Previous game" : "Next game")
+    }
+}
+
 struct BottomBar: View {
     @ObservedObject var controllers: ControllerInput
     var page: Int
     var pages: Int
+    var onStep: (Int) -> Void = { _ in }
     var body: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 5) {
-                    ForEach(0..<max(pages, 1), id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(i == page ? Theme.selection : .white.opacity(0.35))
-                            .frame(width: 13, height: 13)
+                HStack(spacing: 10) {
+                    StepButton(symbol: "chevron.left", enabled: page > 0) { onStep(-1) }
+                    HStack(spacing: 5) {
+                        ForEach(0..<max(pages, 1), id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(i == page ? Theme.selection : .white.opacity(0.35))
+                                .frame(width: 13, height: 13)
+                        }
                     }
+                    StepButton(symbol: "chevron.right", enabled: page < pages - 1) { onStep(1) }
                 }
                 Image(systemName: "gamecontroller.fill")
                     .font(.system(size: 46))

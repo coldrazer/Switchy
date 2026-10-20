@@ -73,7 +73,12 @@ cd apps/Switchy && swift test           # MNGCore against the real agent (also r
 
 The menu has a development fixture for checking the carousel: **Settings → Developer → Show 10 mock games** adds
 ten local tiles with their covers (they are not apps, cannot be launched and never reach the agent), so the glide can
-be exercised without building a game. The covers are test artwork under `Sources/Switchy/Resources/mock-*.jpg`.
+be exercised without building a game. The previous/next buttons beside the page dots, the arrow keys and a controller
+all drive the same `move()` and the same spring.
+
+The covers are `Sources/Switchy/Resources/mock-*.jpg`, composed from the retail box art shown on each game's
+Wikipedia article. They are fair-use test fixtures for this private build: delete that set (and the Developer toggle)
+before publishing a public release.
 
 The agent tests run the real runner subprocess over build_app's real step graph with harmless steps
 (`tests/agent_fake_pipeline.py`); no game data, keys or macOS needed. The SwiftUI views compile only on macOS.

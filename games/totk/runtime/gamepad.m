@@ -1,6 +1,9 @@
 /* Native macOS controllers feed the same FullKey state as the keyboard. */
 #import <Foundation/Foundation.h>
 #import <GameController/GameController.h>
+#import <IOKit/hid/IOHIDManager.h>
+#import <IOKit/hid/IOHIDKeys.h>
+#import <IOKit/hid/IOHIDUsageTables.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -76,6 +79,126 @@ static uint64_t gamepad_buttons(GCExtendedGamepad *pad, int by_position) {
     return buttons;
 }
 
+/* Generic HID game pads. GameController only lists the families it knows (Xbox, PlayStation, Switch Pro, MFi), so a
+   third-party pad that presents as a plain HID game pad — a PDP Rematch, an arcade stick — is invisible to it. This
+   fallback reads the standard Generic Desktop game-pad usages (14 buttons, hat switch, X/Y/Z/Rz) into the same
+   physical-button bits and stick values, so the same layout file and modes apply. GameController wins when both see a
+   controller: only one source feeds player 1. */
+typedef struct { uint32_t buttons; int hat; int32_t x, y, z, rz; int connected; } HIDPad;
+static HIDPad hidPad;
+static pthread_mutex_t hidLock = PTHREAD_MUTEX_INITIALIZER;
+static IOHIDManagerRef hidManager;
+
+static void hid_reset_locked(void) {
+    hidPad.buttons = 0;
+    hidPad.hat = -1;
+    hidPad.x = hidPad.y = hidPad.z = hidPad.rz = 128;
+}
+
+/* Physical button bits (controller_map.h): HID usages follow the Switch order 1 B, 2 A, 3 Y, 4 X, then L, R, ZL, ZR,
+   minus, plus, L3, R3. Positional bits, then the player's layout maps them as usual. */
+static uint64_t hid_physical_locked(void) {
+    uint64_t b = 0;
+    uint32_t m = hidPad.buttons;
+    if (m & (1u << 0)) b |= 1ULL << 0;    /* south */
+    if (m & (1u << 1)) b |= 1ULL << 1;    /* east */
+    if (m & (1u << 2)) b |= 1ULL << 2;    /* west */
+    if (m & (1u << 3)) b |= 1ULL << 3;    /* north */
+    if (m & (1u << 10)) b |= 1ULL << 4;   /* L3 */
+    if (m & (1u << 11)) b |= 1ULL << 5;   /* R3 */
+    if (m & (1u << 4)) b |= 1ULL << 6;    /* L */
+    if (m & (1u << 5)) b |= 1ULL << 7;    /* R */
+    if (m & (1u << 6)) b |= 1ULL << 8;    /* ZL */
+    if (m & (1u << 7)) b |= 1ULL << 9;    /* ZR */
+    if (m & (1u << 9)) b |= 1ULL << 10;   /* plus */
+    if (m & (1u << 8)) b |= 1ULL << 11;   /* minus */
+    int h = hidPad.hat;
+    if (h == 0 || h == 1 || h == 7) b |= 1ULL << 13;   /* up */
+    if (h == 2 || h == 1 || h == 3) b |= 1ULL << 14;   /* right */
+    if (h == 4 || h == 3 || h == 5) b |= 1ULL << 15;   /* down */
+    if (h == 6 || h == 5 || h == 7) b |= 1ULL << 12;   /* left */
+    return b;
+}
+
+static void hid_input(void *context, IOReturn result, void *sender, IOHIDValueRef value) {
+    (void)context; (void)result; (void)sender;
+    IOHIDElementRef element = IOHIDValueGetElement(value);
+    if (!element) return;
+    uint32_t page = IOHIDElementGetUsagePage(element), usage = IOHIDElementGetUsage(element);
+    CFIndex raw = IOHIDValueGetIntegerValue(value);
+    int changed = 0;
+    pthread_mutex_lock(&hidLock);
+    if (page == kHIDPage_Button) {
+        if (usage >= 1 && usage <= 14) {
+            uint32_t bit = 1u << (usage - 1), before = hidPad.buttons;
+            if (raw) hidPad.buttons |= bit; else hidPad.buttons &= ~bit;
+            changed = before != hidPad.buttons;
+            if (getenv("TOTK_INPUT_LOG")) fprintf(stderr, "[totk-input] HID button %u %s\n", usage, raw ? "down" : "up");
+        }
+    } else if (page == kHIDPage_GenericDesktop) {
+        switch (usage) {
+        case kHIDUsage_GD_X: hidPad.x = (int32_t)raw; changed = 1; break;
+        case kHIDUsage_GD_Y: hidPad.y = (int32_t)raw; changed = 1; break;
+        case kHIDUsage_GD_Z: hidPad.z = (int32_t)raw; changed = 1; break;
+        case kHIDUsage_GD_Rz: hidPad.rz = (int32_t)raw; changed = 1; break;
+        case kHIDUsage_GD_Hatswitch: hidPad.hat = (int)raw; changed = 1; break;
+        default: break;
+        }
+    }
+    pthread_mutex_unlock(&hidLock);
+    if (changed) refresh_gamepads();
+}
+
+static void hid_named(IOHIDDeviceRef device, const char *fallback) {
+    CFTypeRef name = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
+    char text[128];
+    text[0] = 0;
+    if (name && CFGetTypeID(name) == CFStringGetTypeID())
+        CFStringGetCString((CFStringRef)name, text, sizeof text, kCFStringEncodingUTF8);
+    fprintf(stderr, "[totk-input] native HID gamepad %s: %s\n", fallback, text[0] ? text : "unknown");
+}
+
+static void hid_matched(void *context, IOReturn result, void *sender, IOHIDDeviceRef device) {
+    (void)context; (void)result; (void)sender;
+    IOReturn opened = IOHIDDeviceOpen(device, kIOHIDOptionsTypeNone);
+    hid_named(device, "connected");
+    if (opened != kIOReturnSuccess)
+        fprintf(stderr, "[totk-input] HID gamepad could not be opened (%#x); Input Monitoring might be needed\n", opened);
+    pthread_mutex_lock(&hidLock);
+    hidPad.connected = 1;
+    hid_reset_locked();
+    pthread_mutex_unlock(&hidLock);
+    refresh_gamepads();
+}
+
+static void hid_removed(void *context, IOReturn result, void *sender, IOHIDDeviceRef device) {
+    (void)context; (void)result; (void)sender;
+    hid_named(device, "disconnected");
+    pthread_mutex_lock(&hidLock);
+    hidPad.connected = 0;
+    hid_reset_locked();
+    pthread_mutex_unlock(&hidLock);
+    refresh_gamepads();
+}
+
+static void hid_start(void) {
+    hidManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    if (!hidManager) return;
+    NSDictionary *pads = @{(__bridge NSString *)CFSTR(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop),
+                           (__bridge NSString *)CFSTR(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_GamePad)};
+    NSDictionary *sticks = @{(__bridge NSString *)CFSTR(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop),
+                             (__bridge NSString *)CFSTR(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_Joystick)};
+    IOHIDManagerSetDeviceMatchingMultiple(hidManager, (__bridge CFArrayRef)@[pads, sticks]);
+    IOHIDManagerRegisterDeviceMatchingCallback(hidManager, hid_matched, NULL);
+    IOHIDManagerRegisterDeviceRemovalCallback(hidManager, hid_removed, NULL);
+    IOHIDManagerRegisterInputValueCallback(hidManager, hid_input, NULL);
+    IOHIDManagerSetDispatchQueue(hidManager, dispatch_get_main_queue());
+    IOReturn opened = IOHIDManagerOpen(hidManager, kIOHIDOptionsTypeNone);
+    if (opened != kIOReturnSuccess)
+        fprintf(stderr, "[totk-input] HID gamepads unavailable (%#x); Input Monitoring may be needed\n", opened);
+}
+
+
 static void refresh_gamepads(void) {
     RuntimeGamepadState next = {0};
     uint64_t physical = 0;
@@ -91,6 +214,16 @@ static void refresh_gamepads(void) {
     }
     /* Modes work on the physical buttons, not on the mapped ones: two physical buttons may share a Switch button
        (X and L3 both running), and a mapped edge would be lost while the other one is held. */
+    pthread_mutex_lock(&hidLock);
+    if (!next.connected && hidPad.connected) {
+        next.connected = 1;
+        physical |= hid_physical_locked();
+        next.lx = stronger_axis(next.lx, stick_axis((hidPad.x - 128) / 127.0f));
+        next.ly = stronger_axis(next.ly, stick_axis((128 - hidPad.y) / 127.0f));
+        next.rx = stronger_axis(next.rx, stick_axis((hidPad.z - 128) / 127.0f));
+        next.ry = stronger_axis(next.ry, stick_axis((128 - hidPad.rz) / 127.0f));
+    }
+    pthread_mutex_unlock(&hidLock);
     uint64_t now = runtime_now_ns(), edges = physical & ~physicalPrev, synthetic = 0, suppressed = 0;
     int moving = next.lx || next.ly;
     physicalPrev = physical;
@@ -146,6 +279,7 @@ void runtime_gamepad_start(void) {
     if (started) return;
     started = YES;
     load_controller_map();
+    hid_start();
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     [center addObserverForName:GCControllerDidConnectNotification object:nil queue:NSOperationQueue.mainQueue
                    usingBlock:^(NSNotification *notification) { attach_gamepad(notification.object); }];
@@ -163,6 +297,9 @@ void runtime_gamepad_start(void) {
 
 void runtime_gamepad_clear(void) {
     runtime_feedback_quiet();
+    pthread_mutex_lock(&hidLock);
+    hid_reset_locked();
+    pthread_mutex_unlock(&hidLock);
     physicalPrev = 0;
     memset(tapUntil, 0, sizeof tapUntil);
     memset(toggleOn, 0, sizeof toggleOn);

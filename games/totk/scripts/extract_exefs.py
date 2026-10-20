@@ -162,19 +162,23 @@ def program_nca(records, update=False):
         programs = [(r, h) for r, h in records if r["content_type"] == 0]
         require(len(programs) == 1, "Expected one update Program NCA; combined packages are unsupported")
         record, hdr = programs[0]
-        require(record["title_id"] == "0100F2C0115B6000", "Update belongs to another game")
+        found = ', '.join(sorted({r['title_id'] for r, _ in records}))
+        require(record["title_id"] == "0100F2C0115B6000",
+                f"Update belongs to another game ({found}); expected Tears of the Kingdom (0100F2C0115B6000)")
         require(any(hdr[0x400 + i*512 + 4] == 4 for i in range(4)), "Expected a BKTR update, not a base game")
         require(all(r["title_id"] in ("0100F2C0115B6000", "0100F2C0115B6800") for r, _ in records), "Mixed-title update package")
         return record, hdr
     # Update Program NCAs can retain the base title ID; their Meta NCA carries the update ID.
+    found = ', '.join(sorted({r['title_id'] for r, _ in records}))
     metadata = [r for r, _ in records if r['content_type'] == 1]
-    require(len(metadata) <= 1 and all(r['title_id'] == '0100F2C0115B6000' for r in metadata),
-            'Expected base game metadata; updates, DLC and combined packages are unsupported')
+    require(len(metadata) <= 1, f'Expected one program and its metadata NCA; this dump has {len(records)} NCAs ({found})')
+    require(all(r['title_id'] == '0100F2C0115B6000' for r in metadata),
+            f'Only Tears of the Kingdom (0100F2C0115B6000) is supported; this dump is {found}')
     programs = [(r, h) for r, h in records if r['content_type'] == 0]
-    require(len(programs) == 1, 'Expected one base Program NCA; updates, DLC and combined packages are unsupported')
+    require(len(programs) == 1, f'Expected one base Program NCA; this dump has {len(programs)} ({found})')
     record, hdr = programs[0]
     require(record['title_id'] == '0100F2C0115B6000',
-            'Expected Tears of the Kingdom base game 1.0.0; updates, DLC and other games are unsupported')
+            f'Only Tears of the Kingdom (0100F2C0115B6000) is supported; this dump is {found}')
     return record, hdr
 
 

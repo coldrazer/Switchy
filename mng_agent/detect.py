@@ -67,7 +67,7 @@ def inspect_game(path):
             else:
                 f.seek(0x100)
                 if f.read(4) == b'HEAD':
-                    info.update(kind='xci', role='base', title='Tears of the Kingdom (game card)')
+                    info.update(kind='xci', role='base', title='Nintendo Switch game card (XCI)')
                 else:
                     info['note'] = 'not an XCI, NSP or NSZ'
     except OSError as e:

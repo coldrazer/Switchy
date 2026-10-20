@@ -435,6 +435,12 @@ struct SettingsSection: View {
             Section("Game") {
                 ForEach(gameKeys, id: \.self) { name in GameSettingRow(name: name) }
             }
+            Section("Cheats") {
+                ForEach(cheatKeys, id: \.self) { name in CheatRow(name: name) }
+                Text("Cheats are verified writes for the 1.0.0 build and only apply at launch. Health and maximum stamina "
+                     + "share a code slot, as do the two item cheats, so enable one of each pair.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
             Section("Developer") {
                 Toggle("Show 10 mock games in the menu", isOn: $model.showMockGames)
                 Text("Mock tiles exercise the menu carousel. They are not apps, cannot be launched, and never reach the agent.")
@@ -504,7 +510,13 @@ struct SettingsSection: View {
         }
     }
 
-    private var gameKeys: [String] { (model.settings?.game.keys).map { Array($0).sorted() } ?? [] }
+    private var gameKeys: [String] {
+        (model.settings?.game.keys).map { Array($0).filter { !$0.hasPrefix("cheat_") }.sorted() } ?? []
+    }
+
+    private var cheatKeys: [String] {
+        (model.settings?.game.keys).map { Array($0).filter { $0.hasPrefix("cheat_") }.sorted() } ?? []
+    }
 
     private func exportSettings() {
         let panel = NSSavePanel()
@@ -566,6 +578,18 @@ struct PathRow: View {
         panel.message = directory ? "Choose the \(title.lowercased()) folder" : "Choose your \(title.lowercased())"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         if key == "repo" { model.setRepository(url) } else { model.setSettings([key: .string(url.path)]) }
+    }
+}
+
+struct CheatRow: View {
+    var name: String
+    @EnvironmentObject var model: AppModel
+    var body: some View {
+        let description = model.settings?.game[name]?.description.replacingOccurrences(of: "Cheat: ", with: "") ?? name
+        let on = model.settings?.settings["game"]?[name]?.string == "1"
+        Toggle(description, isOn: Binding(get: { on },
+                                          set: { model.setSettings(["game": [name: $0 ? "1" : .null]]) }))
+            .tint(Theme.red)
     }
 }
 

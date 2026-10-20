@@ -422,6 +422,141 @@ static void patch_pchtxt(Module *m) {
     fprintf(stderr, "[totk] TOTK_PCHTXT %s: %u patches, %u bytes in main (build id %s)\n", path, count, bytes, want);
 }
 
+/* Cheats, from the 1.0.0 build's public cheat table (build 082CE09B06E33A12): the same verified-write shape as the
+   patches above. Every cheat is off unless its TOTK_CHEAT_* variable is 1. A site is written only while it still holds
+   the original instruction the table was made against, and a cheat whose writes overlap another enabled cheat's with a
+   different value is refused instead of half-applied. 1.0.0 only: other versions have their own tables. */
+#if defined(TOTK_GAME_V112) || defined(TOTK_GAME_V121) || defined(TOTK_GAME_V143)
+static void apply_cheats(Module *m) { (void)m; }
+#else
+typedef struct { uint32_t offset, word; } CheatWrite;
+typedef struct { const char *env, *label; const CheatWrite *writes; size_t count; } Cheat;
+
+static const CheatWrite cheat_health[] = {   /* infinite health */
+    {0x02AA6FF8u, 0x176EA507u},
+    {0x02AA6FFCu, 0xF9400008u},
+    {0x02AA6FF0u, 0xB9000808u},
+    {0x02AA6FF4u, 0x34000048u},
+    {0x02AA6FECu, 0xB9401808u},
+    {0x00650414u, 0x14915AF6u},
+};
+
+static const CheatWrite cheat_stamina[] = {   /* infinite stamina */
+    {0x0096EF40u, 0xBD405E61u},
+    {0x00B1EFDCu, 0xF290000Fu},
+    {0x00B1EFE0u, 0xD2A8B76Fu},
+    {0x00B1EFE4u, 0xB900026Fu},
+};
+
+static const CheatWrite cheat_durability[] = {   /* infinite weapon durability */
+    {0x02AA6FE4u, 0x177471F1u},
+    {0x02AA6FE8u, 0xB9000901u},
+    {0x02AA6FE0u, 0xB9401901u},
+    {0x007C37A8u, 0x148B8E0Eu},
+};
+
+static const CheatWrite cheat_battery[] = {   /* infinite battery */
+    {0x00B6B4A4u, 0xBD004669u},
+    {0x00B6B51Cu, 0xBD004669u},
+};
+
+static const CheatWrite cheat_eat[] = {   /* items are not consumed when eaten */
+    {0x02AA6FDCu, 0x00000001u},
+    {0x02AA6FD0u, 0x17E3B1D1u},
+    {0x02AA6FD4u, 0x0B01014Au},
+    {0x02AA6FC8u, 0x1B057C21u},
+    {0x02AA6FCCu, 0x34000045u},
+    {0x02AA6FC0u, 0x5400006Du},
+    {0x02AA6FC4u, 0x3100043Fu},
+    {0x02AA6FB8u, 0x180000E5u},
+    {0x02AA6FBCu, 0x540000EDu},
+    {0x02AA6FB0u, 0x3100043Fu},
+    {0x02AA6FB4u, 0x34000065u},
+    {0x02AA6FACu, 0x18000185u},
+    {0x02393714u, 0x141C4E26u},
+};
+
+static const CheatWrite cheat_item10[] = {   /* picked-up items count ten times */
+    {0x02AA6FD8u, 0x0000000Au},
+    {0x02AA6FD0u, 0x17E3B1D1u},
+    {0x02AA6FD4u, 0x0B01014Au},
+    {0x02AA6FC8u, 0x1B057C21u},
+    {0x02AA6FCCu, 0x34000045u},
+    {0x02AA6FC0u, 0x5400006Du},
+    {0x02AA6FC4u, 0x3100043Fu},
+    {0x02AA6FB8u, 0x180000E5u},
+    {0x02AA6FBCu, 0x540000EDu},
+    {0x02AA6FB0u, 0x3100043Fu},
+    {0x02AA6FB4u, 0x34000065u},
+    {0x02AA6FACu, 0x18000185u},
+    {0x02393714u, 0x141C4E26u},
+};
+
+static const CheatWrite cheat_maxstamina[] = {   /* maximum stamina (three rings) */
+    {0x02AA6FF8u, 0x453B8000u},
+    {0x02AA6FFCu, 0xD65F03C0u},
+    {0x02AA6FF0u, 0xBD001D00u},
+    {0x02AA6FF4u, 0x1C000060u},
+    {0x0096ED24u, 0x9484E0B3u},
+};
+
+typedef struct { uint32_t offset, word; } CheatOriginal;
+/* The original words at the patched sites, from the table's Restore Code. */
+static const CheatOriginal cheat_originals[] = {
+    {0x00650414u, 0xF9400008u}, {0x0096EF40u, 0x1E212841u},
+    {0x00B1EFDCu, 0xBD401D00u}, {0x00B1EFE0u, 0x9B292908u}, {0x00B1EFE4u, 0xBD000260u},
+    {0x007C37A8u, 0xB9400901u}, {0x00B6B4A4u, 0xBD004668u}, {0x00B6B51Cu, 0xBD004668u},
+};
+
+static const Cheat cheats[] = {
+    {"TOTK_CHEAT_HEALTH", "infinite health", cheat_health, sizeof cheat_health / sizeof cheat_health[0]},
+    {"TOTK_CHEAT_STAMINA", "infinite stamina", cheat_stamina, sizeof cheat_stamina / sizeof cheat_stamina[0]},
+    {"TOTK_CHEAT_DURABILITY", "infinite weapon durability", cheat_durability, sizeof cheat_durability / sizeof cheat_durability[0]},
+    {"TOTK_CHEAT_BATTERY", "infinite battery", cheat_battery, sizeof cheat_battery / sizeof cheat_battery[0]},
+    {"TOTK_CHEAT_EAT", "items are not consumed when eaten", cheat_eat, sizeof cheat_eat / sizeof cheat_eat[0]},
+    {"TOTK_CHEAT_ITEM10", "picked-up items count ten times", cheat_item10, sizeof cheat_item10 / sizeof cheat_item10[0]},
+    {"TOTK_CHEAT_MAXSTAMINA", "maximum stamina (three rings)", cheat_maxstamina, sizeof cheat_maxstamina / sizeof cheat_maxstamina[0]},
+};
+
+static void apply_cheats(Module *m) {
+    uint32_t written[128], word[128];
+    size_t written_count = 0;
+    for (size_t c = 0; c < sizeof cheats / sizeof cheats[0]; c++) {
+        const Cheat *cheat = &cheats[c];
+        const char *env = getenv(cheat->env);
+        if (!env || strcmp(env, "1")) continue;
+        int ok = 1;
+        for (size_t w = 0; w < cheat->count && ok; w++) {
+            for (size_t o = 0; o < sizeof cheat_originals / sizeof cheat_originals[0]; o++) {
+                if (cheat_originals[o].offset != cheat->writes[w].offset) continue;
+                uint32_t have;
+                memcpy(&have, m->base + cheat->writes[w].offset, sizeof have);
+                if (have != cheat_originals[o].word) {
+                    fprintf(stderr, "[totk] cheat %s: main+%#x holds %08x, expected %08x; left off\n",
+                            cheat->label, cheat->writes[w].offset, have, cheat_originals[o].word);
+                    ok = 0;
+                }
+            }
+            for (size_t b = 0; b < written_count; b++)
+                if (written[b] == cheat->writes[w].offset && word[b] != cheat->writes[w].word) {
+                    fprintf(stderr, "[totk] cheat %s: main+%#x conflicts with another enabled cheat; left off\n",
+                            cheat->label, cheat->writes[w].offset);
+                    ok = 0;
+                }
+        }
+        if (!ok) continue;
+        for (size_t w = 0; w < cheat->count; w++) {
+            if (written_count < sizeof written / sizeof written[0]) {
+                written[written_count] = cheat->writes[w].offset;
+                word[written_count++] = cheat->writes[w].word;
+            }
+            memcpy(m->base + cheat->writes[w].offset, &cheat->writes[w].word, sizeof(uint32_t));
+        }
+        fprintf(stderr, "[totk] cheat on: %s (%zu words)\n", cheat->label, cheat->count);
+    }
+}
+#endif
+
 void runtime_game_patches(Module *m) {
     runtime_survey_init(m);
     const size_t n = sizeof fps60_sites / sizeof fps60_sites[0];
@@ -444,6 +579,7 @@ void runtime_game_patches(Module *m) {
         return;
     }
     patch_pchtxt(m);   /* first: the runtime's own patches check the original words they replace */
+    apply_cheats(m);
     if (realtime_enabled()) patch_realtime(m);
     else fprintf(stderr,"[totk] real-time frame step off (TOTK_REALTIME=0)\n");
     patch_render_res(m);

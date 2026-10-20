@@ -17,6 +17,14 @@ GAME_SETTINGS = {
     'language': ('TOTK_LANG', 'Game language code (for example en-US, ja, fr); empty follows macOS', 'language'),
     'rumble_gain': ('TOTK_RUMBLE_GAIN', 'Controller rumble strength, above 0 up to 4', 'gain'),
     'window_size': ('TOTK_WINDOW_SIZE', 'Initial window size <width>x<height>', 'window'),
+    # Cheats (games/totk/runtime/game_patches.c): verified writes for the 1.0.0 build. Off unless set to 1.
+    'cheat_health': ('TOTK_CHEAT_HEALTH', 'Cheat: infinite health', ('1', '0')),
+    'cheat_stamina': ('TOTK_CHEAT_STAMINA', 'Cheat: infinite stamina', ('1', '0')),
+    'cheat_durability': ('TOTK_CHEAT_DURABILITY', 'Cheat: infinite weapon durability', ('1', '0')),
+    'cheat_battery': ('TOTK_CHEAT_BATTERY', 'Cheat: infinite battery', ('1', '0')),
+    'cheat_eat': ('TOTK_CHEAT_EAT', 'Cheat: eating does not use items', ('1', '0')),
+    'cheat_item10': ('TOTK_CHEAT_ITEM10', 'Cheat: picked-up items count 10x', ('1', '0')),
+    'cheat_maxstamina': ('TOTK_CHEAT_MAXSTAMINA', 'Cheat: maximum stamina (3 rings)', ('1', '0')),
 }
 
 _ASPECT = re.compile(r'^(?:(\d{1,2}):(\d{1,2})|(\d{3,5})x(\d{3,5}))$')

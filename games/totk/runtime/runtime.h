@@ -114,6 +114,7 @@ void runtime_memory_probe(void);
 
 void runtime_input_key(unsigned code,int down);
 void runtime_input_clear(void);
+uint32_t runtime_input_held(void);   /* current libnx key mask (for cheat key conditions) */
 int runtime_handheld_mode(void);   /* TOTK_OPERATION_MODE=handheld (runtime/services.c) */
 void *runtime_input_override(const char *name);
 typedef struct { uint64_t buttons; int32_t lx,ly,rx,ry; int connected; } RuntimeGamepadState;

@@ -9,6 +9,11 @@
 #include <strings.h>
 #include <stdatomic.h>
 #include <math.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <sys/mman.h>
 
 /* 60 FPS.
    TOTK's adaptive present-interval controller (main+0x8f6bec, called once per frame from main+0x8f68b4) turns the main
@@ -428,6 +433,7 @@ static void patch_pchtxt(Module *m) {
    different value is refused instead of half-applied. 1.0.0 only: other versions have their own tables. */
 #if defined(TOTK_GAME_V112) || defined(TOTK_GAME_V121) || defined(TOTK_GAME_V143)
 static void apply_cheats(Module *m) { (void)m; }
+static void start_cheat_vm(Module *m) { (void)m; }
 #else
 typedef struct { uint32_t offset, word; } CheatWrite;
 typedef struct { const char *env, *label; const CheatWrite *writes; size_t count; } Cheat;
@@ -555,6 +561,378 @@ static void apply_cheats(Module *m) {
         fprintf(stderr, "[totk] cheat on: %s (%zu words)\n", cheat->label, cheat->count);
     }
 }
+
+/* ---- cheat VM (1.0.0 only) ----
+   The pointer and loop cheats from the same table, executed by a small interpreter with Atmosphere's opcode
+   semantics: StoreStatic, EndConditional, ControlLoop, LoadRegisterMemory (including pointer chases), 
+   StoreStaticToAddress, PerformArithmeticStatic/Register, StoreRegisterToAddress, keypress and register
+   conditionals. Memory access goes through mach so a pointer that the game has not set up yet cannot crash the
+   process; reads and writes that fail are skipped, exactly like the reference VM. */
+typedef struct { const char *env, *label; const uint32_t *code; size_t count; int started; } VmCheat;
+
+static const uint32_t vm_zonai[] = {   /* Zonai devices x98 */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x00000138u, 0x580F1000u, 0x000011A8u, 0x300C0000u, 0x0000003Cu,
+    0x989BF000u, 0x540B1000u, 0x00000000u, 0xC046B400u, 0xFFFFFFFFu, 0x640F1000u, 0x00000000u, 0x00000062u,
+    0x21000000u, 0x780F0000u, 0x00000008u, 0x20000000u, 0x310C0000u,
+};
+
+static const uint32_t vm_materials_all[] = {   /* all materials x98 */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x00000138u, 0x580F1000u, 0x00000F28u, 0x300C0000u, 0x000001FEu,
+    0x989BF000u, 0x540B1000u, 0x00000000u, 0xC046B400u, 0xFFFFFFFFu, 0x640F1000u, 0x00000000u, 0x00000062u,
+    0x21000000u, 0x780F0000u, 0x00000008u, 0x20000000u, 0x310C0000u,
+};
+
+static const uint32_t vm_food_all[] = {   /* all cooked food x98 */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x00000138u, 0x580F1000u, 0x00000E68u, 0x300C0000u, 0x00000078u,
+    0x989BF000u, 0x540B1000u, 0x00000000u, 0xC046B400u, 0xFFFFFFFFu, 0x640F1000u, 0x00000000u, 0x00000062u,
+    0x21000000u, 0x780F0000u, 0x00000008u, 0x20000000u, 0x310C0000u,
+};
+
+static const uint32_t vm_jump[] = {   /* jump high while holding X — keypress */
+    0x580F0000u, 0x04642D88u, 0x580F1000u, 0x000000C8u, 0x580F1000u, 0x00000178u, 0x580F1000u, 0x00000030u,
+    0x780F0000u, 0x000000FCu, 0x80000004u, 0x640F01D0u, 0x00000000u, 0x41200000u, 0x20000000u,
+};
+
+static const uint32_t vm_maxheart[] = {   /* maximum hearts (40) */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x000002F8u,
+    0x580F1000u, 0x00001830u, 0x780F0000u, 0x00000008u, 0x640F1000u, 0x00000000u, 0x000000A0u,
+};
+
+static const uint32_t vm_heartfill[] = {   /* hearts always full */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x000002F8u,
+    0x989AF000u, 0x580F1000u, 0x00001838u, 0x540F1000u, 0x00000008u, 0x580A1000u, 0x00001830u, 0xA4FA0200u,
+    0x00000008u,
+};
+
+static const uint32_t vm_staminafill[] = {   /* stamina always full */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x000003A8u,
+    0x780F0000u, 0x000013CCu, 0x640F1000u, 0x00000000u, 0x453B8000u,
+};
+
+static const uint32_t vm_weapon[] = {   /* weapon durability max */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x00000230u,
+    0x580F1000u, 0x00000028u, 0x580F1000u, 0x00000040u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x000002F8u,
+    0x989AF000u, 0x580F1000u, 0x00001838u, 0x540F1000u, 0x00000008u, 0x580A1000u, 0x00001830u, 0xA4FA0200u,
+    0x00000008u,
+};
+
+static const uint32_t vm_bow[] = {   /* bow durability max */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x00000230u,
+    0x580F1000u, 0x00000070u, 0x580F1000u, 0x00000040u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x000002F8u,
+    0x989AF000u, 0x580F1000u, 0x00001838u, 0x540F1000u, 0x00000008u, 0x580A1000u, 0x00001830u, 0xA4FA0200u,
+    0x00000008u,
+};
+
+static const uint32_t vm_shield[] = {   /* shield durability max */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x00000230u,
+    0x580F1000u, 0x00000088u, 0x580F1000u, 0x00000040u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x000002F8u,
+    0x989AF000u, 0x580F1000u, 0x00001838u, 0x540F1000u, 0x00000008u, 0x580A1000u, 0x00001830u, 0xA4FA0200u,
+    0x00000008u,
+};
+
+static const uint32_t vm_arrows[] = {   /* 998 arrows */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x00000138u, 0x580F1000u, 0x00000BE8u, 0x780F0000u, 0x00000000u,
+    0x640F1000u, 0x00000000u, 0x000003E6u,
+};
+
+static const uint32_t vm_rupees[] = {   /* 99,999,999 rupees */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x000000D8u, 0x780F0000u, 0x00028EA4u, 0x640F1000u, 0x00000000u,
+    0x05F5E0FFu,
+};
+
+static const uint32_t vm_materials[] = {   /* materials x98 */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x00000138u, 0x580F1000u, 0x00000F28u, 0x780F0000u, 0x00000000u,
+    0x300C0000u, 0x000001F4u, 0x989BF000u, 0x540B1000u, 0x00000000u, 0xC046B400u, 0xFFFFFFFFu, 0x640F1000u,
+    0x00000000u, 0x00000062u, 0x20000000u, 0x310C0000u,
+};
+
+static const uint32_t vm_food[] = {   /* cooked food x98 */
+    0x580F0000u, 0x04646C60u, 0x580F1000u, 0x00000138u, 0x580F1000u, 0x00000E68u, 0x780F0000u, 0x00000000u,
+    0x300C0000u, 0x00000078u, 0x989BF000u, 0x540B1000u, 0x00000000u, 0xC046B400u, 0xFFFFFFFFu, 0x640F1000u,
+    0x00000000u, 0x00000062u, 0x20000000u, 0x310C0000u,
+};
+
+static const uint32_t vm_moonjump[] = {   /* moon jump while holding X — keypress */
+    0x580F0000u, 0x04642D88u, 0x580F1000u, 0x000000C8u, 0x580F1000u, 0x00000178u, 0x580F1000u, 0x00000030u,
+    0x780F0000u, 0x000000FCu, 0x80000004u, 0x640F1000u, 0x00000000u, 0x41200000u, 0x20000000u,
+};
+
+static const uint32_t vm_move2x[] = {   /* run 2x while holding B — keypress */
+    0x580F0000u, 0x045D6750u, 0x580F1000u, 0x00000480u, 0x580F1000u, 0x00000220u, 0x580F1000u, 0x00000040u,
+    0x780F0000u, 0x00000098u, 0x640F0000u, 0x00000000u, 0x3F800000u, 0x80000002u, 0x640F1000u, 0x00000000u,
+    0x40000000u, 0x20000000u,
+};
+
+static VmCheat vm_cheats[] = {
+    {"TOTK_CHEAT_ZONAI", "Zonai devices x98", vm_zonai, sizeof vm_zonai / sizeof vm_zonai[0], 0},
+    {"TOTK_CHEAT_MATERIALS_ALL", "all materials x98", vm_materials_all, sizeof vm_materials_all / sizeof vm_materials_all[0], 0},
+    {"TOTK_CHEAT_FOOD_ALL", "all cooked food x98", vm_food_all, sizeof vm_food_all / sizeof vm_food_all[0], 0},
+    {"TOTK_CHEAT_JUMP", "jump high while holding X", vm_jump, sizeof vm_jump / sizeof vm_jump[0], 0},
+    {"TOTK_CHEAT_MAXHEART", "maximum hearts (40)", vm_maxheart, sizeof vm_maxheart / sizeof vm_maxheart[0], 0},
+    {"TOTK_CHEAT_HEARTFILL", "hearts always full", vm_heartfill, sizeof vm_heartfill / sizeof vm_heartfill[0], 0},
+    {"TOTK_CHEAT_STAMINAFILL", "stamina always full", vm_staminafill, sizeof vm_staminafill / sizeof vm_staminafill[0], 0},
+    {"TOTK_CHEAT_WEAPON", "weapon durability max", vm_weapon, sizeof vm_weapon / sizeof vm_weapon[0], 0},
+    {"TOTK_CHEAT_BOW", "bow durability max", vm_bow, sizeof vm_bow / sizeof vm_bow[0], 0},
+    {"TOTK_CHEAT_SHIELD", "shield durability max", vm_shield, sizeof vm_shield / sizeof vm_shield[0], 0},
+    {"TOTK_CHEAT_ARROWS", "998 arrows", vm_arrows, sizeof vm_arrows / sizeof vm_arrows[0], 0},
+    {"TOTK_CHEAT_RUPEES", "99,999,999 rupees", vm_rupees, sizeof vm_rupees / sizeof vm_rupees[0], 0},
+    {"TOTK_CHEAT_MATERIALS", "materials x98", vm_materials, sizeof vm_materials / sizeof vm_materials[0], 0},
+    {"TOTK_CHEAT_FOOD", "cooked food x98", vm_food, sizeof vm_food / sizeof vm_food[0], 0},
+    {"TOTK_CHEAT_MOONJUMP", "moon jump while holding X", vm_moonjump, sizeof vm_moonjump / sizeof vm_moonjump[0], 0},
+    {"TOTK_CHEAT_MOVE2X", "run 2x while holding B", vm_move2x, sizeof vm_move2x / sizeof vm_move2x[0], 0},
+};
+static uint64_t vm_base, vm_text_end;
+
+typedef struct { const uint32_t *code; size_t n, pc; uint64_t r[16], loops[16]; int depth; } Vm;
+
+static uint64_t cvm_mask(unsigned bw) { return bw == 8 ? ~0ULL : ((1ULL << (bw * 8)) - 1); }
+
+static int cvm_read(uint64_t addr, void *out, size_t n) {
+    mach_vm_size_t got = 0;
+    if (!addr) return 0;
+    kern_return_t kr = mach_vm_read_overwrite(mach_task_self(), (mach_vm_address_t)addr, (mach_vm_size_t)n,
+                                              (mach_vm_address_t)(uintptr_t)out, &got);
+    return kr == KERN_SUCCESS && got == (mach_vm_size_t)n;
+}
+
+/* Text is read-only by the time the cheats run: mach refuses the write, so the page is opened just for it. */
+static int cvm_write(uint64_t addr, const void *in, size_t n) {
+    if (!addr) return 0;
+    if (mach_vm_write(mach_task_self(), (mach_vm_address_t)addr, (vm_offset_t)(uintptr_t)in, (mach_msg_type_number_t)n) == KERN_SUCCESS)
+        return 1;
+    if (addr >= vm_base && addr + n <= vm_text_end) {
+        uintptr_t page = (uintptr_t)addr & ~(uintptr_t)0xFFF;
+        size_t len = (((size_t)(addr - page)) + n + 0xFFF) & ~(size_t)0xFFF;
+        if (mprotect((void *)page, len, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+            memcpy((void *)(uintptr_t)addr, in, n);
+            mprotect((void *)page, len, PROT_READ | PROT_EXEC);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static uint64_t cvm_addr(uint32_t mem, uint64_t rel) { return mem == 4 ? rel : vm_base + rel; }
+
+/* Advance past one opcode and its operands without executing it (conditional skipping). */
+static int cvm_advance(Vm *vm, uint32_t first, uint32_t op) {
+    uint32_t bw = (first >> 24) & 0xF;
+    vm->pc++;
+    switch (op) {
+    case 0: case 1: vm->pc += 1 + (size_t)(bw == 8 ? 2 : 1); break;
+    case 2: break;
+    case 3: if (((first >> 24) & 0xF) == 0) vm->pc += 1; break;
+    case 4: vm->pc += 2; break;
+    case 5: vm->pc += 1; break;
+    case 6: vm->pc += 2; break;
+    case 7: vm->pc += 1; break;
+    case 8: break;
+    case 9: if ((first >> 8) & 0xF) vm->pc += (size_t)(bw == 8 ? 2 : 1); break;
+    case 10: { uint32_t ot = (first >> 8) & 0xF; if (ot == 2 || ot == 4 || ot == 5) vm->pc += 1; break; }
+    case 0xC0: { uint32_t ct = (first >> 8) & 0xF; if (ct == 0 || ct == 2) vm->pc += 1; else if (ct == 4) vm->pc += (size_t)(((first >> 20) & 0xF) == 8 ? 2 : 1); break; }
+    default: return 0;
+    }
+    return vm->pc <= vm->n;
+}
+
+static int cvm_skip(Vm *vm, int is_if) {
+    if (vm->depth <= 0) return 0;
+    int desired = vm->depth - 1;
+    while (vm->depth > desired && vm->pc < vm->n) {
+        uint32_t first = vm->code[vm->pc];
+        uint32_t op = (first >> 28) & 0xF;
+        if (op >= 12) op = (op << 4) | ((first >> 24) & 0xF);
+        int begins = (op == 1 || op == 8 || op == 0xC0);
+        if (!cvm_advance(vm, first, op)) return 0;
+        if (begins) vm->depth++;
+        else if (op == 2) {
+            int is_else = ((first >> 24) & 0xF) == 1;
+            if (!is_else) vm->depth--;
+            else if (is_if && vm->depth - 1 == desired) break;
+        }
+    }
+    return 1;
+}
+
+static int cvm_run(const VmCheat *cheat, uint32_t keys) {
+    Vm vm;
+    memset(&vm, 0, sizeof vm);
+    vm.code = cheat->code; vm.n = cheat->count;
+    int steps = 0;
+    while (vm.pc < vm.n) {
+        if (++steps > 100000) return -1;
+        uint32_t first = vm.code[vm.pc++];
+        uint32_t op = (first >> 28) & 0xF;
+        if (op >= 12) op = (op << 4) | ((first >> 24) & 0xF);
+        uint32_t bw = (first >> 24) & 0xF, mem = (first >> 20) & 0xF, R = (first >> 16) & 0xF;
+        switch (op) {
+        case 0: {
+            uint64_t rel = ((uint64_t)(first & 0xFF) << 32) | vm.code[vm.pc++];
+            uint64_t value;
+            if (bw == 8) { value = ((uint64_t)vm.code[vm.pc] << 32) | vm.code[vm.pc + 1]; vm.pc += 2; }
+            else value = vm.code[vm.pc++];
+            value &= cvm_mask(bw);
+            uint64_t addr = cvm_addr(mem, rel) + vm.r[R];
+            cvm_write(addr, &value, bw);
+            break;
+        }
+        case 2:
+            if (((first >> 24) & 0xF) == 1) { if (!cvm_skip(&vm, 0)) return -1; }
+            else if (vm.depth > 0) vm.depth--;
+            break;
+        case 3:
+            if (((first >> 24) & 0xF) == 0) { vm.r[R] = vm.code[vm.pc++]; vm.loops[R] = vm.pc; }
+            else if (--vm.r[R] != 0) vm.pc = (size_t)vm.loops[R];
+            break;
+        case 5: {
+            uint64_t rel = ((uint64_t)(first & 0xFF) << 32) | vm.code[vm.pc++];
+            uint32_t from = (first >> 12) & 0xF, ofs = (first >> 8) & 0xF;
+            uint64_t addr;
+            if (from == 1) addr = vm.r[R] + rel;
+            else if (from == 2) addr = vm.r[ofs] + rel;
+            else if (from == 3) addr = cvm_addr(mem, vm.r[ofs] + rel);
+            else addr = cvm_addr(mem, rel);
+            uint64_t value;
+            if (cvm_read(addr, &value, bw)) vm.r[R] = value & cvm_mask(bw);
+            break;
+        }
+        case 6: {
+            uint64_t value = ((uint64_t)vm.code[vm.pc] << 32) | vm.code[vm.pc + 1];
+            vm.pc += 2;
+            uint64_t addr = vm.r[R];
+            if ((first >> 8) & 0xF) addr += vm.r[(first >> 4) & 0xF];
+            cvm_write(addr, &value, bw);
+            if ((first >> 12) & 0xF) vm.r[R] += bw;
+            break;
+        }
+        case 7: {
+            uint32_t value = vm.code[vm.pc++];
+            switch ((first >> 12) & 0xF) {
+            case 0: vm.r[R] += value; break;
+            case 1: vm.r[R] -= value; break;
+            case 2: vm.r[R] *= value; break;
+            case 3: vm.r[R] <<= value; break;
+            case 4: vm.r[R] >>= value; break;
+            default: break;
+            }
+            vm.r[R] &= cvm_mask(bw);
+            break;
+        }
+        case 8: {
+            uint32_t mask = first & 0x0FFFFFFF;
+            vm.depth++;
+            if ((keys & mask) != mask) { if (!cvm_skip(&vm, 1)) return -1; }
+            break;
+        }
+        case 9: {
+            uint32_t math = (first >> 20) & 0xF, dst = R, src = (first >> 12) & 0xF;
+            uint32_t imm = (first >> 8) & 0xF;
+            uint64_t a = vm.r[src], b;
+            if (imm) {
+                b = (bw == 8) ? (((uint64_t)vm.code[vm.pc] << 32) | vm.code[vm.pc + 1]) : vm.code[vm.pc];
+                vm.pc += (size_t)(bw == 8 ? 2 : 1);
+            } else b = vm.r[(first >> 4) & 0xF];
+            switch (math) {
+            case 0: a += b; break;
+            case 1: a -= b; break;
+            case 2: a *= b; break;
+            case 3: a <<= b; break;
+            case 4: a >>= b; break;
+            case 5: a &= b; break;
+            case 6: a |= b; break;
+            case 7: a = ~a; break;
+            case 8: a ^= b; break;
+            case 9: break;
+            default: break;
+            }
+            vm.r[dst] = a & cvm_mask(bw);
+            break;
+        }
+        case 10: {
+            uint32_t src = (first >> 20) & 0xF, areg = R;
+            uint64_t value = vm.r[src], addr = vm.r[areg];
+            uint32_t ofs = (first >> 8) & 0xF;
+            if (ofs == 1) addr += vm.r[(first >> 4) & 0xF];
+            else if (ofs == 2) { uint64_t rel = ((uint64_t)(first & 0xF) << 32) | vm.code[vm.pc++]; addr += rel; }
+            else if (ofs == 3) addr = cvm_addr((first >> 4) & 0xF, vm.r[areg]);
+            else if (ofs == 4) { uint64_t rel = ((uint64_t)(first & 0xF) << 32) | vm.code[vm.pc++]; addr = cvm_addr((first >> 4) & 0xF, rel); }
+            else if (ofs == 5) { uint64_t rel = ((uint64_t)(first & 0xF) << 32) | vm.code[vm.pc++]; addr = cvm_addr((first >> 4) & 0xF, vm.r[areg] + rel); }
+            cvm_write(addr, &value, bw);
+            if ((first >> 12) & 0xF) vm.r[areg] += bw;
+            break;
+        }
+        case 0xC0: {
+            uint32_t cbw = (first >> 20) & 0xF, cond = (first >> 16) & 0xF;
+            uint32_t vr = (first >> 12) & 0xF, comp = (first >> 8) & 0xF;
+            uint64_t sv = vm.r[vr] & cvm_mask(cbw), cv = 0;
+            if (comp == 0) {
+                uint64_t rel = ((uint64_t)(first & 0xF) << 32) | vm.code[vm.pc++];
+                cvm_read(cvm_addr((first >> 4) & 0xF, rel), &cv, cbw);
+            } else if (comp == 1) {
+                cvm_read(cvm_addr((first >> 4) & 0xF, vm.r[first & 0xF]), &cv, cbw);
+            } else if (comp == 2) {
+                uint64_t rel = ((uint64_t)(first & 0xF) << 32) | vm.code[vm.pc++];
+                cvm_read(vm.r[(first >> 4) & 0xF] + rel, &cv, cbw);
+            } else if (comp == 3) {
+                cvm_read(vm.r[(first >> 4) & 0xF] + vm.r[first & 0xF], &cv, cbw);
+            } else if (comp == 4) {
+                cv = (cbw == 8) ? (((uint64_t)vm.code[vm.pc] << 32) | vm.code[vm.pc + 1]) : vm.code[vm.pc];
+                vm.pc += (size_t)(cbw == 8 ? 2 : 1);
+            } else if (comp == 5) {
+                cv = vm.r[(first >> 4) & 0xF] & cvm_mask(cbw);
+            }
+            cv &= cvm_mask(cbw);
+            int met = 0;
+            switch (cond) {
+            case 1: met = sv > cv; break;
+            case 2: met = sv >= cv; break;
+            case 3: met = sv < cv; break;
+            case 4: met = sv <= cv; break;
+            case 5: met = sv == cv; break;
+            case 6: met = sv != cv; break;
+            default: met = 1; break;
+            }
+            vm.depth++;
+            if (!met) { if (!cvm_skip(&vm, 1)) return -1; }
+            break;
+        }
+        default:
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void *cheat_vm_thread(void *arg) {
+    (void)arg;
+    usleep(20 * 1000 * 1000);
+    for (;;) {
+        uint32_t keys = runtime_input_held();
+        for (size_t i = 0; i < sizeof vm_cheats / sizeof vm_cheats[0]; i++) {
+            VmCheat *cheat = &vm_cheats[i];
+            const char *env = getenv(cheat->env);
+            if (!env || strcmp(env, "1")) continue;
+            if (cvm_run(cheat, keys) == 0 && !cheat->started) {
+                cheat->started = 1;
+                fprintf(stderr, "[totk] cheat on: %s (pointer)\n", cheat->label);
+            }
+        }
+        usleep(250 * 1000);
+    }
+    return NULL;
+}
+
+static void start_cheat_vm(Module *m) {
+    static int started;
+    if (started) return;
+    started = 1;
+    vm_base = (uint64_t)(uintptr_t)m->base;
+    vm_text_end = vm_base + m->text_end;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, cheat_vm_thread, NULL) == 0) pthread_detach(thread);
+    fprintf(stderr, "[totk] cheat VM ready; pointer cheats apply from 20 s after start\n");
+}
+
 #endif
 
 void runtime_game_patches(Module *m) {
@@ -580,6 +958,7 @@ void runtime_game_patches(Module *m) {
     }
     patch_pchtxt(m);   /* first: the runtime's own patches check the original words they replace */
     apply_cheats(m);
+    start_cheat_vm(m);
     if (realtime_enabled()) patch_realtime(m);
     else fprintf(stderr,"[totk] real-time frame step off (TOTK_REALTIME=0)\n");
     patch_render_res(m);

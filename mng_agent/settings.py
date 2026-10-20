@@ -25,6 +25,22 @@ GAME_SETTINGS = {
     'cheat_eat': ('TOTK_CHEAT_EAT', 'Cheat: eating does not use items', ('1', '0')),
     'cheat_item10': ('TOTK_CHEAT_ITEM10', 'Cheat: picked-up items count 10x', ('1', '0')),
     'cheat_maxstamina': ('TOTK_CHEAT_MAXSTAMINA', 'Cheat: maximum stamina (3 rings)', ('1', '0')),
+    'cheat_zonai': ('TOTK_CHEAT_ZONAI', 'Cheat: Zonai devices x98', ('1', '0')),
+    'cheat_materials_all': ('TOTK_CHEAT_MATERIALS_ALL', 'Cheat: all materials x98', ('1', '0')),
+    'cheat_food_all': ('TOTK_CHEAT_FOOD_ALL', 'Cheat: all cooked food x98', ('1', '0')),
+    'cheat_jump': ('TOTK_CHEAT_JUMP', 'Cheat: jump high while holding X', ('1', '0')),
+    'cheat_maxheart': ('TOTK_CHEAT_MAXHEART', 'Cheat: maximum hearts (40)', ('1', '0')),
+    'cheat_heartfill': ('TOTK_CHEAT_HEARTFILL', 'Cheat: hearts always full', ('1', '0')),
+    'cheat_staminafill': ('TOTK_CHEAT_STAMINAFILL', 'Cheat: stamina always full', ('1', '0')),
+    'cheat_weapon': ('TOTK_CHEAT_WEAPON', 'Cheat: weapon durability max', ('1', '0')),
+    'cheat_bow': ('TOTK_CHEAT_BOW', 'Cheat: bow durability max', ('1', '0')),
+    'cheat_shield': ('TOTK_CHEAT_SHIELD', 'Cheat: shield durability max', ('1', '0')),
+    'cheat_arrows': ('TOTK_CHEAT_ARROWS', 'Cheat: 998 arrows', ('1', '0')),
+    'cheat_rupees': ('TOTK_CHEAT_RUPEES', 'Cheat: 99,999,999 rupees', ('1', '0')),
+    'cheat_materials': ('TOTK_CHEAT_MATERIALS', 'Cheat: materials x98', ('1', '0')),
+    'cheat_food': ('TOTK_CHEAT_FOOD', 'Cheat: cooked food x98', ('1', '0')),
+    'cheat_moonjump': ('TOTK_CHEAT_MOONJUMP', 'Cheat: moon jump while holding X', ('1', '0')),
+    'cheat_move2x': ('TOTK_CHEAT_MOVE2X', 'Cheat: run 2x while holding B', ('1', '0')),
 }
 
 _ASPECT = re.compile(r'^(?:(\d{1,2}):(\d{1,2})|(\d{3,5})x(\d{3,5}))$')

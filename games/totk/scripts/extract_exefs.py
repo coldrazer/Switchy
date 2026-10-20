@@ -171,9 +171,11 @@ def program_nca(records, update=False):
     # Update Program NCAs can retain the base title ID; their Meta NCA carries the update ID.
     found = ', '.join(sorted({r['title_id'] for r, _ in records}))
     metadata = [r for r, _ in records if r['content_type'] == 1]
-    require(len(metadata) <= 1, f'Expected one program and its metadata NCA; this dump has {len(records)} NCAs ({found})')
-    require(all(r['title_id'] == '0100F2C0115B6000' for r in metadata),
-            f'Only Tears of the Kingdom (0100F2C0115B6000) is supported; this dump is {found}')
+    require(len(metadata) <= 1, f'Expected base game metadata (one program and one metadata NCA); this dump has {len(records)} NCAs ({found})')
+    if any(r['title_id'] != '0100F2C0115B6000' for r in metadata):
+        if all(r['title_id'] in ('0100F2C0115B6000', '0100F2C0115B6800') for r in metadata):
+            raise ValueError(f'Expected base game metadata; this looks like an update or DLC package ({found})')
+        raise ValueError(f'Only Tears of the Kingdom (0100F2C0115B6000) is supported; this dump is {found}')
     programs = [(r, h) for r, h in records if r['content_type'] == 0]
     require(len(programs) == 1, f'Expected one base Program NCA; this dump has {len(programs)} ({found})')
     record, hdr = programs[0]

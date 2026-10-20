@@ -655,9 +655,8 @@ def developer_dirs():
         pass
     found += [str(p / 'Contents/Developer') for p in sorted(Path('/Applications').glob('Xcode*.app'))]
     found += [str(p / 'Contents/Developer') for p in sorted(Path.home().glob('Applications/Xcode*.app'))]
-    # An Xcode kept on another volume, at its top or one folder down (Spotlight may not index it)
-    found += [str(p / 'Contents/Developer') for p in sorted(Path('/Volumes').glob('*/Xcode*.app'))]
-    found += [str(p / 'Contents/Developer') for p in sorted(Path('/Volumes').glob('*/*/Xcode*.app'))]
+    # Spotlight finds an Xcode kept outside /Applications without walking every mounted volume (a slow or stale
+    # volume used to block this for minutes at the start of shader compilation). An unindexed one: set DEVELOPER_DIR.
     try:
         spotlight = subprocess.check_output(['mdfind', "kMDItemCFBundleIdentifier == 'com.apple.dt.Xcode'"], text=True,
                                             stderr=subprocess.DEVNULL)

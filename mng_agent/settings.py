@@ -17,6 +17,8 @@ GAME_SETTINGS = {
     'language': ('TOTK_LANG', 'Game language code (for example en-US, ja, fr); empty follows macOS', 'language'),
     'rumble_gain': ('TOTK_RUMBLE_GAIN', 'Controller rumble strength, above 0 up to 4', 'gain'),
     'window_size': ('TOTK_WINDOW_SIZE', 'Initial window size <width>x<height>', 'window'),
+    'amiibo_dump': ('TOTK_AMIIBO', 'Amiibo dump selected in the Amiibo menu (path)', 'text'),
+    'amiibo_folder': ('TOTK_AMIIBO_DIR', 'Folder holding your amiibo dumps', 'text'),
     # Cheats (games/totk/runtime/game_patches.c): verified writes for the 1.0.0 build. Off unless set to 1.
     'cheat_health': ('TOTK_CHEAT_HEALTH', 'Cheat: infinite health', ('1', '0')),
     'cheat_stamina': ('TOTK_CHEAT_STAMINA', 'Cheat: infinite stamina', ('1', '0')),
@@ -71,6 +73,8 @@ def _check_game(name, value):
             ok = 0 < float(value) <= 4
         except ValueError:
             ok = False
+    elif rule == 'text':
+        ok = 0 < len(value) <= 4096 and '\n' not in value and '\x00' not in value
     elif rule == 'window':
         m = _SIZE.match(value)
         ok = bool(m) and 320 <= int(m.group(1)) <= 8192 and 180 <= int(m.group(2)) <= 8192

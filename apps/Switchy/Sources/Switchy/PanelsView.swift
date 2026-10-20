@@ -29,6 +29,7 @@ struct PanelsView: View {
                     case .library: LibrarySection()
                     case .builds: BuildsSection()
                     case .mods: ModsSection()
+                    case .amiibo: AmiiboSection()
                     case .profile: ProfileSection()
                     case .settings: SettingsSection()
                     case .diagnostics: DiagnosticsSection()
@@ -511,7 +512,7 @@ struct SettingsSection: View {
     }
 
     private var gameKeys: [String] {
-        (model.settings?.game.keys).map { Array($0).filter { !$0.hasPrefix("cheat_") }.sorted() } ?? []
+        (model.settings?.game.keys).map { Array($0).filter { !$0.hasPrefix("cheat_") && !$0.hasPrefix("amiibo_") }.sorted() } ?? []
     }
 
     private var cheatKeys: [String] {

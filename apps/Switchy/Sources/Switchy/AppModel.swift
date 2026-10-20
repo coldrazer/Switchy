@@ -9,13 +9,14 @@ import SwiftUI
 final class AppModel: ObservableObject {
     enum Connection: Equatable { case connecting, connected, unavailable(String) }
     enum Panel: String, Identifiable, CaseIterable {
-        case library, builds, mods, profile, settings, diagnostics
+        case library, builds, mods, amiibo, profile, settings, diagnostics
         var id: String { rawValue }
         var title: String {
             switch self {
             case .library: return "Library"
             case .builds: return "Builds"
             case .mods: return "Mods"
+            case .amiibo: return "Amiibo"
             case .profile: return "Profile"
             case .settings: return "Settings"
             case .diagnostics: return "Diagnostics"
@@ -26,6 +27,7 @@ final class AppModel: ObservableObject {
             case .library: return "square.grid.2x2.fill"
             case .builds: return "hammer.fill"
             case .mods: return "puzzlepiece.extension.fill"
+            case .amiibo: return "dot.radiowaves.left.and.right"
             case .profile: return "person.crop.circle.fill"
             case .settings: return "gearshape.fill"
             case .diagnostics: return "stethoscope"

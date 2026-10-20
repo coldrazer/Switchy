@@ -277,6 +277,7 @@ struct TopBar: View {
                 model.panel = .builds
             }
             BarButton(symbol: "puzzlepiece.extension.fill", color: Theme.iconMods, label: "Mods") { model.panel = .mods }
+            BarButton(symbol: "dot.radiowaves.left.and.right", color: Color(red: 0.35, green: 0.78, blue: 0.95), label: "Amiibo") { model.panel = .amiibo }
             BarButton(symbol: "plus.rectangle.on.rectangle", color: Theme.iconAdd, label: "Add a game") { model.setupFiles = [] }
             BarButton(symbol: "stethoscope", color: .white, label: "Diagnostics") { model.panel = .diagnostics }
             BarButton(symbol: "gearshape.fill", color: .white, label: "Settings") { model.panel = .settings }

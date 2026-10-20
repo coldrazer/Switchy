@@ -34,6 +34,7 @@ struct HomeView: View {
     @State private var selection = 0
     @State private var detailsFor: LibraryApp?
     @State private var dropTargeted = false
+    @State private var forward = true
     @FocusState private var focused: Bool
 
     var items: [HomeItem] {
@@ -98,7 +99,8 @@ struct HomeView: View {
             ZStack(alignment: .bottomLeading) {
                 TileView(item: all[start], art: art(all[start]), large: true)   // items always holds the Add tile
                     .id(all[start].id)
-                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                    .transition(.asymmetric(insertion: .move(edge: forward ? .trailing : .leading)
+                                                .combined(with: .opacity),
                                             removal: .opacity.animation(.easeIn(duration: 0.12))))
                     .onTapGesture(count: 2) { activate() }
                     .onTapGesture { options() }
@@ -116,7 +118,7 @@ struct HomeView: View {
                             TileView(item: item, art: art(item), large: false)
                                 .offset(x: CGFloat(slot) * step)
                                 .opacity(slot >= 0 && slot < slots ? 1 : 0)
-                                .onTapGesture { selection = index }
+                                .onTapGesture { forward = index > selection; selection = index }
                         }
                     }
                     .frame(width: geo.size.width, height: Theme.tile, alignment: .bottomLeading)
@@ -145,6 +147,7 @@ struct HomeView: View {
     }
 
     private func move(_ delta: Int) {
+        forward = delta >= 0
         selection = max(0, min(items.count - 1, selection + delta))
     }
 

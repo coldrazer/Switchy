@@ -8,7 +8,8 @@ struct AmiiboEntry: Decodable, Identifiable, Equatable {
     var series: String
     var rel: String
     var section: String
-    var id: String { rel }
+    var id: String? = nil
+    var identity: String { rel }
 }
 
 private struct AmiiboCatalog: Decodable {
@@ -26,6 +27,7 @@ struct AmiiboSection: View {
     @State private var folder = ""
     @State private var have: Set<String> = []
     @State private var selected = ""
+    @State private var selectedID = ""
 
     private var totk: [AmiiboEntry] { filtered("totk") }
     private var botw: [AmiiboEntry] { filtered("botw") }
@@ -43,9 +45,10 @@ struct AmiiboSection: View {
                 TextField("Search amiibo", text: $query)
                     .textFieldStyle(.roundedBorder).frame(width: 220)
             }
-            Text("Switchy does not include amiibo data or keys. Point this at your own dump folder (for example the "
-                 + "AmiiboDB “Amiibo NFC” folder). The selected dump is saved for the runtime's NFC side; tag injection "
-                 + "is a separate piece still being built, so the game does not read it yet.")
+            Text("Switchy does not include amiibo data. Point this at your own dump folder (for example the "
+                 + "AmiiboDB “Amiibo NFC” folder) and pick a tag; the runtime presents it as a virtual NFC tag. Amiibo "
+                 + "IDs (character, series, model) are known for the Zelda entries here; other entries still present "
+                 + "their tag, without character data.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
             Divider()
             ScrollView {
@@ -62,7 +65,8 @@ struct AmiiboSection: View {
         .onChange(of: folder) { _, new in have = scan(new) }
         .onChange(of: selected) { _, new in
             guard !new.isEmpty else { return }
-            model.setSettings(["game": ["amiibo_dump": .string(new), "amiibo_folder": .string(folder)]])
+            model.setSettings(["game": ["amiibo_dump": .string(new), "amiibo_id": .string(selectedID),
+                                        "amiibo_folder": .string(folder)]])
         }
     }
 
@@ -71,7 +75,7 @@ struct AmiiboSection: View {
             Text("\(title.uppercased())  ·  \(list.count)")
                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.red)
                 .padding(.top, 10).padding(.bottom, 2)
-            ForEach(list) { entry in row(entry) }
+            ForEach(list, id: \.identity) { entry in row(entry) }
         }
     }
 
@@ -81,6 +85,7 @@ struct AmiiboSection: View {
         return Button {
             guard present else { return }
             selected = path
+            selectedID = entry.id ?? ""
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "dot.radiowaves.left.and.right")
@@ -119,6 +124,7 @@ struct AmiiboSection: View {
         let settings = model.settings?.settings
         folder = settings?["game"]?["amiibo_folder"]?.string ?? ""
         selected = settings?["game"]?["amiibo_dump"]?.string ?? ""
+        selectedID = settings?["game"]?["amiibo_id"]?.string ?? ""
         have = scan(folder)
         guard entries.isEmpty,
               let url = Bundle.module.url(forResource: "amiibo", withExtension: "json"),

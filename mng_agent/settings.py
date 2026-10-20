@@ -19,6 +19,7 @@ GAME_SETTINGS = {
     'window_size': ('TOTK_WINDOW_SIZE', 'Initial window size <width>x<height>', 'window'),
     'amiibo_dump': ('TOTK_AMIIBO', 'Amiibo dump selected in the Amiibo menu (path)', 'text'),
     'amiibo_folder': ('TOTK_AMIIBO_DIR', 'Folder holding your amiibo dumps', 'text'),
+    'amiibo_id': ('TOTK_AMIIBO_ID', 'Amiibo ID of the selected dump (16 hex digits)', 'text'),
     # Cheats (games/totk/runtime/game_patches.c): verified writes for the 1.0.0 build. Off unless set to 1.
     'cheat_health': ('TOTK_CHEAT_HEALTH', 'Cheat: infinite health', ('1', '0')),
     'cheat_stamina': ('TOTK_CHEAT_STAMINA', 'Cheat: infinite stamina', ('1', '0')),

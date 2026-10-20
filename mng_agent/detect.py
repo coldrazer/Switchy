@@ -10,6 +10,8 @@ import re
 import struct
 from pathlib import Path
 
+from . import titles
+
 TOTK_BASE = '0100f2c0115b6000'
 TOTK_UPDATE = '0100f2c0115b6800'
 KEY_LINE = re.compile(r'^\s*([A-Za-z0-9_]+)\s*=\s*([0-9A-Fa-f]+)\s*$')
@@ -56,10 +58,15 @@ def inspect_game(path):
             if magic == b'PFS0':
                 info['kind'] = 'nsz' if p.suffix.lower() == '.nsz' else 'nsp'
                 names = [n.lower() for n in _pfs0_names(f)]
+                ticket = next((titles.identify(n) for n in names if n.endswith('.tik')), None)
+                if ticket:
+                    info['title_id'] = ticket
                 if any(n.startswith(TOTK_UPDATE) for n in names):
                     info.update(role='update', title='Tears of the Kingdom update')
                 elif any(n.startswith(TOTK_BASE) for n in names):
                     info.update(role='base', title='Tears of the Kingdom')
+                elif ticket and ticket in titles.all():
+                    info.update(role='base', title=titles.all()[ticket]['name'])
                 elif info['kind'] == 'nsz':
                     info['role'] = 'update'   # build_app.py accepts NSZ only for updates
                 else:
@@ -72,6 +79,15 @@ def inspect_game(path):
                     info['note'] = 'not an XCI, NSP or NSZ'
     except OSError as e:
         info['note'] = f'cannot read: {e.strerror}'
+    title_id = info.get('title_id') or titles.identify(p)
+    if title_id:
+        info['title_id'] = title_id
+        known = titles.all().get(title_id)
+        if known:
+            info['game'] = known['name']
+            info['supported'] = bool(known.get('supported'))
+            if not known.get('supported'):
+                info['reason'] = known.get('reason')
     return info
 
 
@@ -139,4 +155,5 @@ def scan(paths, configured_keys=None):
     if not keys:
         keys = find_keys(base['path'] if base else None, configured_keys)['keys']
     return {'files': games, 'base': base['path'] if base else None, 'update': update['path'] if update else None,
-            'keys': keys}
+            'keys': keys, 'supported': base.get('supported') if base else None,
+            'reason': base.get('reason') if base else None}

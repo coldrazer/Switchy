@@ -136,6 +136,10 @@ public struct GameFile: Codable, Equatable, Sendable {
     public var role: String
     public var title: String?
     public var note: String?
+    public var titleId: String?
+    public var game: String?
+    public var supported: Bool?
+    public var reason: String?
 }
 
 public struct Detection: Codable, Equatable, Sendable {
@@ -143,6 +147,8 @@ public struct Detection: Codable, Equatable, Sendable {
     public var base: String?
     public var update: String?
     public var keys: String?
+    public var supported: Bool?
+    public var reason: String?
 }
 
 public struct GameSettingInfo: Codable, Equatable, Sendable {

@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "titles": [
+    {
+      "id": "0100F2C0115B6000",
+      "name": "The Legend of Zelda: Tears of the Kingdom",
+      "supported": true
+    },
+    {
+      "id": "01007EF00011E000",
+      "name": "The Legend of Zelda: Breath of the Wild",
+      "supported": false,
+      "reason": "Breath of the Wild is a different title; this runtime is built from Tears of the Kingdom's code."
+    },
+    {
+      "id": "01002B00111A2000",
+      "name": "Hyrule Warriors: Age of Calamity",
+      "supported": false,
+      "reason": "Age of Calamity runs on a different engine; this runtime is built from Tears of the Kingdom's code."
+    }
+  ]
+}

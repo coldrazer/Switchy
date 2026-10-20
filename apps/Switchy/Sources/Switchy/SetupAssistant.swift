@@ -104,6 +104,27 @@ struct SetupAssistant: View {
             FoundRow(title: "Game", value: detection?.base, missing: "No base game (XCI or NSP) yet")
             FoundRow(title: "Update", value: detection?.update, missing: "None (optional: 1.1.2, 1.2.1 or 1.4.3)", optional: true)
             FoundRow(title: "Keys", value: keys, missing: "No prod.keys found: drop it or choose it")
+            if let base = detection?.base, let file = detection?.files.first(where: { $0.path == base }) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) {
+                        Image(systemName: file.supported == false ? "xmark.octagon.fill" : "checkmark.seal.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(file.supported == false ? Theme.red : .green)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(file.game ?? file.title ?? (file.path as NSString).lastPathComponent)
+                                .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                            Text(statusLine(file)).font(.system(size: 11)).foregroundStyle(Theme.inkSecondary)
+                        }
+                        Spacer()
+                    }
+                    if let reason = file.reason {
+                        Text(reason).font(.system(size: 12)).foregroundStyle(Theme.inkSecondary)
+                    }
+                }
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 10)
+                    .fill(file.supported == false ? Theme.red.opacity(0.07) : Color.green.opacity(0.10)))
+            }
             ForEach(detection?.files.filter { $0.note != nil } ?? [], id: \.path) { file in
                 Label("\((file.path as NSString).lastPathComponent): \(file.note ?? "")", systemImage: "info.circle")
                     .font(.system(size: 12)).foregroundStyle(Theme.inkSecondary)
@@ -119,7 +140,7 @@ struct SetupAssistant: View {
                     Task { await start() }
                 } label: { Label("Build in the background", systemImage: "hammer.fill").padding(.horizontal, 8) }
                     .buttonStyle(.borderedProminent).tint(Theme.red).controlSize(.large)
-                    .disabled(detection?.base == nil || keys == nil)
+                    .disabled(detection?.base == nil || keys == nil || detection?.supported == false)
             }
         }
         .dropDestination(for: URL.self) { urls, _ in add(urls); return true }
@@ -190,8 +211,23 @@ struct SetupAssistant: View {
         }
     }
 
+    private func statusLine(_ file: GameFile) -> String {
+        var parts: [String] = []
+        if let id = file.titleId { parts.append(id) }
+        switch file.supported {
+        case .some(false): parts.append("not supported by this build")
+        case .some(true): parts.append("supported")
+        default: parts.append("title not in the file name; the build identifies it by content")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     private func start() async {
         guard let base = detection?.base else { return }
+        guard detection?.supported != false else {
+            problem = detection?.reason ?? "This game is not supported by this build."
+            return
+        }
         guard model.hasRoomForBuild(path: base) else {
             problem = "This build needs about 25 GB free next to the game file; there is not enough room."
             return

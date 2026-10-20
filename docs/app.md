@@ -71,6 +71,10 @@ python3 -m unittest discover -s tests          # includes tests/test_agent.py an
 cd apps/Switchy && swift test           # MNGCore against the real agent (also runs on Linux)
 ```
 
+The menu has a development fixture for checking the carousel: **Settings → Developer → Show 10 mock games** adds
+ten local tiles with their covers (they are not apps, cannot be launched and never reach the agent), so the glide can
+be exercised without building a game. The covers are test artwork under `Sources/Switchy/Resources/mock-*.jpg`.
+
 The agent tests run the real runner subprocess over build_app's real step graph with harmless steps
 (`tests/agent_fake_pipeline.py`); no game data, keys or macOS needed. The SwiftUI views compile only on macOS.
 

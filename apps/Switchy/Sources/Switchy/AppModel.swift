@@ -57,12 +57,20 @@ final class AppModel: ObservableObject {
     /// Set when GitHub answers 404/403: the repository is private, so these two features cannot reach it yet.
     @Published var updateNote: String?
     @Published var sourceNote: String?
+    /// Developer menu fixture: ten tiles that never reach the agent, for testing the carousel.
+    @Published var showMockGames = UserDefaults.standard.bool(forKey: "showMockGames") {
+        didSet { UserDefaults.standard.set(showMockGames, forKey: "showMockGames") }
+    }
 
     private var client: AgentClient?
     private var started = false
 
     var activeJobs: [Job] { jobs.filter(\.isActive) }
-    var macApps: [LibraryApp] { library.filter { $0.platform == "macos" }.sorted { $0.built > $1.built } }
+    var macApps: [LibraryApp] {
+        let real = library.filter { $0.platform == "macos" }
+        let all = showMockGames ? real + MockLibrary.apps : real
+        return all.sorted { $0.built > $1.built }
+    }
 
     // MARK: connection
 
@@ -174,9 +182,21 @@ final class AppModel: ObservableObject {
 
     // MARK: actions
 
-    func play(_ app: LibraryApp) { perform { try await $0.launch(app: app.path) } }
-    func rebuild(_ app: LibraryApp) { perform { _ = try await $0.rebuild(app: app.path) } }
-    func forget(_ app: LibraryApp) { perform { try await $0.forget(app: app.path) } }
+    func play(_ app: LibraryApp) {
+        guard !MockLibrary.isMock(app) else {
+            message = "That is a mock tile for the carousel test; there is no app behind it to launch."
+            return
+        }
+        perform { try await $0.launch(app: app.path) }
+    }
+    func rebuild(_ app: LibraryApp) {
+        guard !MockLibrary.isMock(app) else { message = "Mock tiles cannot be rebuilt."; return }
+        perform { _ = try await $0.rebuild(app: app.path) }
+    }
+    func forget(_ app: LibraryApp) {
+        guard !MockLibrary.isMock(app) else { message = "Mock tiles are not in the library; turn them off in Settings."; return }
+        perform { try await $0.forget(app: app.path) }
+    }
     func cancel(_ job: Job) { perform { _ = try await $0.cancel(job: job.id) } }
     func showInFinder(_ path: String) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
 

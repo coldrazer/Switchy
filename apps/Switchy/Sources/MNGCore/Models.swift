@@ -76,6 +76,19 @@ public struct LibraryApp: Codable, Equatable, Identifiable, Sendable {
     public var missing: Bool?
     public var id: String { path }
     public var name: String { (path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "") }
+
+    public init(path: String, version: String, displayVersion: String, platform: String, built: Double,
+                job: String? = nil, params: [String: JSONValue]? = nil, stale: Bool? = nil, missing: Bool? = nil) {
+        self.path = path
+        self.version = version
+        self.displayVersion = displayVersion
+        self.platform = platform
+        self.built = built
+        self.job = job
+        self.params = params
+        self.stale = stale
+        self.missing = missing
+    }
 }
 
 public struct AppDetails: Codable, Equatable, Sendable {

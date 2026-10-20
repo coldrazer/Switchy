@@ -44,6 +44,7 @@ struct HomeView: View {
     var selected: HomeItem { items[min(selection, items.count - 1)] }
 
     var body: some View {
+        GeometryReader { geo in
         ZStack {
             Backdrop(image: selectedArt)
             VStack(alignment: .leading, spacing: 0) {
@@ -59,7 +60,11 @@ struct HomeView: View {
                 BottomBar(controllers: controllers, page: selection, pages: items.count)
                     .padding(.horizontal, 56).padding(.bottom, 30)
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             if dropTargeted { DropHint() }
+        }
+        .frame(width: geo.size.width, height: geo.size.height)
+        .clipped()
         }
         .frame(minWidth: 1100, minHeight: 680)
         .focusable()
@@ -80,7 +85,7 @@ struct HomeView: View {
     }
 
     private var selectedArt: NSImage? {
-        if case .app(let a) = selected { return model.art[a.path] }
+        if case .app(let a) = selected { return model.art[a.path] ?? MockLibrary.art(for: a.path) }
         return nil
     }
 
@@ -88,30 +93,49 @@ struct HomeView: View {
     private var shelf: some View {
         let all = items
         let start = min(selection, all.count - 1)
-        let following = Array(all[(start + 1)...])
         return HStack(alignment: .bottom, spacing: 22) {
             Marker(show: selection == 0 && !model.macApps.isEmpty)
-            TileView(item: all[start], art: art(all[start]), large: true)   // items always holds the Add tile
-                .onTapGesture(count: 2) { activate() }
-                .onTapGesture { options() }
+            ZStack(alignment: .bottomLeading) {
+                TileView(item: all[start], art: art(all[start]), large: true)   // items always holds the Add tile
+                    .id(all[start].id)
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                            removal: .opacity.animation(.easeIn(duration: 0.12))))
+                    .onTapGesture(count: 2) { activate() }
+                    .onTapGesture { options() }
+            }
             VStack(alignment: .leading, spacing: 18) {
                 TitleBlock(item: selected, details: details(selected), onPlay: activate, onOptions: options)
-                HStack(spacing: 22) {
-                    ForEach(following) { item in
-                        TileView(item: item, art: art(item), large: false)
-                            .onTapGesture { selection = all.firstIndex(of: item) ?? selection }
+                GeometryReader { geo in
+                    // One strip of every tile, shifted by one step per selection: the row glides instead of
+                    // inserting and removing views. Tiles outside the visible slots are faded out, not removed.
+                    let step = Theme.tile + 22
+                    let slots = max(1, Int((geo.size.width + 22) / step))
+                    ZStack(alignment: .bottomLeading) {
+                        ForEach(Array(all.enumerated()), id: \.element.id) { index, item in
+                            let slot = index - start - 1
+                            TileView(item: item, art: art(item), large: false)
+                                .offset(x: CGFloat(slot) * step)
+                                .opacity(slot >= 0 && slot < slots ? 1 : 0)
+                                .onTapGesture { selection = index }
+                        }
                     }
+                    .frame(width: geo.size.width, height: Theme.tile, alignment: .bottomLeading)
+                    .clipped()
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                                                 .init(color: .black, location: 0.9),
+                                                 .init(color: .clear, location: 1)],
+                                         startPoint: .leading, endPoint: .trailing))
                 }
-                .frame(height: Theme.tile, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .clipped()
+                .frame(height: Theme.tile)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
         .padding(.leading, 40)
     }
 
     private func art(_ item: HomeItem) -> NSImage? {
-        if case .app(let a) = item { return model.art[a.path] }
+        if case .app(let a) = item { return model.art[a.path] ?? MockLibrary.art(for: a.path) }
         return nil
     }
 

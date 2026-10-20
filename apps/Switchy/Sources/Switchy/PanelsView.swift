@@ -435,6 +435,11 @@ struct SettingsSection: View {
             Section("Game") {
                 ForEach(gameKeys, id: \.self) { name in GameSettingRow(name: name) }
             }
+            Section("Developer") {
+                Toggle("Show 10 mock games in the menu", isOn: $model.showMockGames)
+                Text("Mock tiles exercise the menu carousel. They are not apps, cannot be launched, and never reach the agent.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
             Section("Agent") {
                 LabeledContent("Status") {
                     if model.connection == .connected, let hello = model.hello {

@@ -38,6 +38,10 @@ other. See [how it works](docs/how-it-works.md).
   interrupted build resumes on the next start.
 - **Mods** — keep mods in a library, enable them per game version; conflicting files are refused before the game sees
   them.
+- **Amiibo** — point Switchy at your own `.nfc`/`.bin` dumps (Flipper text or raw), pick a figure from the Tears of the
+  Kingdom, Breath of the Wild and Nintendo-lineup sections, and the runtime presents it as a virtual tag. No amiibo
+  data or keys are bundled.
+- **Cheats** — 23 verified cheats for 1.0.0; overlapping ones explain the conflict and switch their counterpart off.
 - **Settings and diagnostics** — game settings are validated and passed as `TOTK_*` variables; one click exports a
   diagnostics archive with keys redacted.
 - **Shader prewarming** — startup shaders are prepared and compiled at build time, so the first launch does not
@@ -55,6 +59,10 @@ other. See [how it works](docs/how-it-works.md).
 | <img src="docs/screenshots/welcome.png" width="620" alt="First-run checklist"> | <img src="docs/screenshots/profile.png" width="620" alt="Profile"> |
 | **Setup Assistant** | **Settings** |
 | <img src="docs/screenshots/setup.png" width="620" alt="Setup Assistant"> | <img src="docs/screenshots/settings.png" width="620" alt="Settings"> |
+| **Amiibo** | **Cheats** |
+| <img src="docs/screenshots/amiibo.png" width="620" alt="Amiibo menu"> | <img src="docs/screenshots/cheats.png" width="620" alt="Cheats"> |
+| **Overlapping cheats** | |
+| <img src="docs/screenshots/cheat-conflict.png" width="620" alt="Overlapping cheats"> | |
 
 ## Install
 

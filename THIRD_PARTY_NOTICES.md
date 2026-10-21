@@ -1,6 +1,8 @@
 # Third-party code
 
 Code in this repository that comes from other projects keeps its license; the license file sits next to the code.
+The repository's own code is licensed under the **PolyForm Noncommercial License 1.0.0** ([LICENSE](LICENSE)):
+personal, noncommercial use only — selling it is not permitted.
 
 | Code | From | License | File |
 |---|---|---|---|

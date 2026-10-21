@@ -224,7 +224,7 @@ deleting a folder).
 
 - **Prebuilt binaries mean a release process.** Signing, notarization, per-OS-version slices. This
   is the cost of removing the compiler from the user's life, and it is worth it.
-- **The game cannot be redistributed.** The app is MIT-clean; the built output contains the game.
+- **The game cannot be redistributed.** The app is licensed for personal, noncommercial use; the built output contains the game.
   Releases distribute the tool, never the result. A user who builds gets a copy for their own use.
 - **macOS 26+ is a real ceiling.** The Metal 4 requirement and the guest-memory layout below 2^39
   both need the new OS. Widening it means a Vulkan or Metal 3 path in the NVN layer — a much larger

@@ -226,7 +226,7 @@ Recorded performance experiments, remaining work and comparison methods: [Mac pe
 
 ## License
 
-MIT (see [LICENSE](../LICENSE)). Third-party code keeps its own license: [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+PolyForm Noncommercial 1.0.0 (see [LICENSE](../LICENSE)): personal, noncommercial use only, no resale. Third-party code keeps its own license: [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -454,4 +454,4 @@ west = y
 
 ## 许可证
 
-MIT（见 [LICENSE](../LICENSE)）。第三方代码保留各自的许可证：[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+PolyForm Noncommercial 1.0.0（见 [LICENSE](../LICENSE)）：仅限个人非商业使用，禁止转售。第三方代码保留各自的许可证：[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

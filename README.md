@@ -10,7 +10,7 @@
   <a href="https://github.com/coldrazer/Switchy/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/coldrazer/Switchy?style=flat-square&color=e60012"></a>
   <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-1d1d1f?style=flat-square&logo=apple&logoColor=white">
   <img alt="Swift 5.9" src="https://img.shields.io/badge/Swift-5.9-f05138?style=flat-square&logo=swift&logoColor=white">
-  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square"></a>
+  <a href="LICENSE"><img alt="PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-2ea44f?style=flat-square"></a>
   <a href="https://github.com/coldrazer/Switchy/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/coldrazer/Switchy/actions/workflows/tests.yml/badge.svg"></a>
 </p>
 
@@ -163,7 +163,8 @@ supply your own legally obtained copy of the game and your own keys. *Nintendo S
 Tears of the Kingdom* are trademarks of Nintendo; this project is an independent interoperability effort.
 
 Third-party components and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This
-repository's own code is MIT licensed.
+repository's own code is licensed under the [PolyForm Noncommercial
+License 1.0.0](LICENSE): personal, noncommercial use only, no resale.
 
 ## Acknowledgements
 
@@ -173,4 +174,4 @@ deko3d, libopus and libvpx.
 
 ## License
 
-[MIT](LICENSE) © 2026 Switchy contributors
+[PolyForm Noncommercial 1.0.0](LICENSE) © 2026 coldrazer. Personal, noncommercial use only; no resale.

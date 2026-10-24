@@ -2,4 +2,4 @@
 -r requirements.txt
 unicorn==2.1.4
 Pillow==12.3.0
-brotli==1.2.0
+brotli==1.2.1
